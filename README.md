@@ -1,0 +1,3 @@
+# test
+
+canvasの内容をMediaRecoderでエンコードしてWebSocketサーバに送信するテスト．
