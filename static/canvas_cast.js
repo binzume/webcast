@@ -27,8 +27,39 @@ function drawFrame(ctx, width, height) {
 
 function searchConfigRecord(b) {
 	// parse NAL.
-	// TODO get SPS(7) PPS(8)
-	return null;
+	// TODO: multiple pps?
+	let sps = [], pps = [];
+	let type = 0;
+	for (let i = 0; i < b.length-4; i++) {
+		if (b[i] == 0 && b[i+1] == 0 && b[i+2] == 0 && b[i+3] == 1) {
+			console.log("NAL unit type" + (b[i+4]&0x1f));
+			type = (b[i+4]&0x1f);
+			if (type == 7) {
+				console.log(" SPS profile" + (b[i+5]));
+				console.log(" SPS level" + (b[i+7]));
+			}
+			i += 3;
+		} else {
+			if (type == 7) sps.push(b[i]);
+			if (type == 8) pps.push(b[i]);
+		}
+	}
+	console.log("SPS", sps);
+	console.log("PPS", pps);
+	var profile_idc = sps[1];
+	var level_idc = sps[3];
+	var compat = 0;
+	var r = new Uint8Array(sps.length + pps.length + 11);
+	r.set([1, profile_idc, compat, level_idc, 0xff, (3 << 5) | 1, sps.length << 8, sps.length]);
+	r.set(sps, 8);
+	r.set([1, 0, pps.length], 8 + sps.length);
+	r.set(pps, 8 + sps.length + 3);
+	console.log(r);
+	return r;
+}
+
+function setNalUnitSize(b) {
+	// TODO
 }
 
 function createStreamMessage(type, e, payload) {
@@ -81,6 +112,7 @@ window.addEventListener('DOMContentLoaded',(function(e){
 					console.log(" time:" + e.value.timecode + " + " + e.parent.timecode);
 					console.log(" flags:" + e.value.flags);
 					if (ws) {
+						setNalUnitSize(e.value.payload);
 						ws.send(createStreamMessage(3, e, e.value.payload));
 					}
 					e.value = null; // avoid append to parent.
