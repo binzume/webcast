@@ -1,15 +1,13 @@
 "use strict";
 
-
 class WebmParser {
     constructor() {
         this.buffer = [];
         this.buffers = [];
-        this.stack = [];
         this.position = 0;
         this.length = 0;
-        this.offset = 0;
         this.currentElement = null;
+        this.stack = [];
         this.listener = {};
 
         let ebmlSpec = {
@@ -26,9 +24,9 @@ class WebmParser {
         // webm
         let clusterSpec = {
             0xe7: ['timecode', 'int'],
-            0xa3: ['simple_block', 'simple_block']
+            0xa3: ['simple_block', 'simple_block'],
+            0x1f43b675: ['cluster', '_sibling_'] // ignore cluster in cluster.
         };
-        clusterSpec[0x1f43b675] = ['cluster', 'object', clusterSpec] // TODO: handle unknown size elem.
 
         let infoSpec = {
             0x2ad7b1: ['timecode_scale', 'int'],
@@ -36,18 +34,15 @@ class WebmParser {
             0x5741: ['writing_app', 'string'],
         };
 
-        let trackEntSpec = {
-            0x63a2: ['codec_private', 'raw'],
+        let tracksSpec = {
+            0xae: ['track_entry', 'object'],
             0xe0: ['video', 'object'],
             0xe1: ['audio', 'object'],
             0xb0: ['width', 'int'],
             0xba: ['height', 'int'],
             0xb5: ['sampling_frequency', 'int'],
-            0x86: ['codec', 'string']
-        };
-
-        let tracksSpec = {
-            0xae: ['track_entry', 'object', trackEntSpec]
+            0x86: ['codec', 'string'],
+            0x63a2: ['codec_private', 'raw']
         };
 
         let segmentSpec = {
@@ -60,18 +55,18 @@ class WebmParser {
             0xb7: ['cue_track_points'],
             0x1f43b675: ['cluster', 'object', clusterSpec]
         };
-        this.handlers = {
+        let spec = {
             0x1a45dfa3: ["ebml", 'object', ebmlSpec],
             0x18538067: ["webm_segment", 'object', segmentSpec]
         };
-        this.stack.push({name:"_root", handlers: this.handlers, childlen: []});
+        this.stack.push({name:"_root", spec: spec, size: -1});
     }
 
     setListenser(name, cb) {
         this.listener[name] = cb;
     }
 
-    append(b) {
+    appendBuf(b) {
         this.buffers.push(b);
         this.length += b.length;
     }
@@ -88,7 +83,7 @@ class WebmParser {
         }
         return false;
     }
-    
+
     // return value or null
     readId() {
         if(!this.checkBuf()) return null;
@@ -137,14 +132,12 @@ class WebmParser {
         return new Uint8Array(this.buffer.buffer, p, l);
     }
 
-    read8() {
+    readByte() {
         let v = this.buffer[this.position];
         this.position ++;
         return v;
     }
-    read16() {
-        return this.readN(2);
-    }
+
     readN(l) {
         let v = 0;
         for (let i = 0; i < l; i++) {
@@ -153,15 +146,19 @@ class WebmParser {
         }
         return v;
     }
+
     readStr(l) {
         return String.fromCharCode.apply(null, this.buffer.slice(this.position, this.position+l));
     }
 
-    _concatBuffer(buffer1, buffer2) {
-        var r = new Uint8Array(buffer1.byteLength + buffer2.byteLength);
-        r.set(new Uint8Array(buffer1), 0);
-        r.set(new Uint8Array(buffer2), buffer1.byteLength);
-        return r.buffer;
+    completeElement(e) {
+        // console.log("ok" , e);
+        if (this.listener[e.name]) {
+            this.listener[e.name](e);
+        }
+        if (e.value !== null) {
+            this._parent()[e.name] = e.value;
+        }
     }
 
     _parent() {
@@ -169,11 +166,12 @@ class WebmParser {
     }
 
     tryParse() {
-        for (var t = 0 ;t < 200; t ++) {
+        let objectCountLimit = 1000;
+        for (var t = 0 ;this.stack.length > 0 && t < objectCountLimit; t ++) {
             if (this.currentElement == null) {
                 let id = this.readId();
                 if (id === null) return;
-                this.currentElement = {id: id, size: null, handlers:null, childlen: [], value: null};
+                this.currentElement = {id: id, spec: {}, value: null, size: null};
             }
             if (this.currentElement.size === null) {
                 let size = this.readInt();
@@ -181,73 +179,48 @@ class WebmParser {
                 this.currentElement.size = size;
                 this.currentElement.start = this.position;
 
-                // console.log("block ", this.currentElement);
-                if (this.handlers) {
-                    let h = this.handlers[this.currentElement.id] || ['unknown','raw',null];
-                    this.currentElement.name = h[0];
-                    this.currentElement.type = h[1];
-                    if (h[1] == 'object') {
-                        this.handlers = h[2] || this.handlers;
-                        this.currentElement.handlers = this.handlers;
-                        this.stack.push(this.currentElement);
-                        this.currentElement = null;
-                        continue;
-                    } else {
-                        this.handlers = null;
-                    }
+                let spec = this._parent().spec;
+                let type = spec[this.currentElement.id] || ['unknown','raw',null];
+                if (type[1] == '_sibling_') {
+                    this.completeElement(this.stack.pop());
+                    spec = this._parent().spec;
+                    type = spec[this.currentElement.id] || ['unknown','raw',null];
+                }
+                this.currentElement.name = type[0];
+                this.currentElement.type = type[1];
+                if (type[1] == 'object') {
+                    this.currentElement.spec = type[2] || spec;
+                    this.stack.push(this.currentElement);
+                    this.currentElement = null;
+                    continue;
                 }
             }
 
-            if (this.currentElement.size < 0 || this.length < this.currentElement.start + this.currentElement.size) {
-                console.log("wait");
+            if (this.currentElement.size < 0 || this.length - this.position < this.currentElement.size) {
                 return;
             }
 
             if (this.currentElement.type =='simple_block') {
-                let tr = this.readInt(), t = this.read16(), f = this.read8();
+                let tr = this.readInt(), t = this.readN(2), f = this.readByte();
                 let sz =  this.currentElement.start + this.currentElement.size - this.position;
-                if (sz < 0) sz = 0;
                 this.currentElement.value = {track: tr, timecode: t, flags: f, payload: this.readBytes(sz)};
                 this.currentElement.parent = this._parent();
             } else if (this.currentElement.type =='int') {
                 this.currentElement.value = this.readN(this.currentElement.size);
-            } else if (this.currentElement.type =='vint') {
-                this.currentElement.value = this.readInt(this.currentElement.size);
             } else if (this.currentElement.type =='string') {
                 this.currentElement.value = this.readStr(this.currentElement.size);
             }
-            if (this.listener[this.currentElement.name]) {
-                this.listener[this.currentElement.name](this.currentElement);
-            }
-            console.log("ok", this.currentElement);
             this.position = this.currentElement.start + this.currentElement.size;
 
-
-            for (;;) {
-                if (this.stack.length > 0) {
-                    let p = this._parent();
-                    if (this.currentElement.value !== null) {
-                        p.childlen.push(this.currentElement);
-                        p[this.currentElement.name] = this.currentElement.value;
-                    }
-                    if (p.start + p.size == this.position) {
-                        this.currentElement = this.stack.pop();
-                        if (this.listener[this.currentElement.name]) {
-                            this.listener[this.currentElement.name](this.currentElement);
-                        }
-                        console.log("ok object", this.currentElement);
-                        continue;
-                    }
+            while (this.stack.length > 0) {
+                this.completeElement(this.currentElement);
+                let p = this._parent();
+                if (p.size < 0 || p.start + p.size != this.position) {
+                    break;
                 }
-                break;
+                this.currentElement = this.stack.pop();
             }
 
-            if (this.stack.length == 0) {
-                console.log("end");
-                return;
-            }
-
-            this.handlers = this._parent().handlers;
             this.currentElement = null;
         }
     }

@@ -4,6 +4,7 @@
 var canvasId = 'screen';
 var streamType = 'video/webm;codecs=h264';
 var segmentLength = 100;
+var avc = true;
 
 var videoFrame = 0;
 function drawFrame(ctx, width, height) {
@@ -105,8 +106,12 @@ window.addEventListener('DOMContentLoaded',(function(e){
 				let configRecord = null;
 				parser.setListenser('simple_block', function(e) {
 					if (configRecord == null) {
-						configRecord = searchConfigRecord(e.value.payload);
-						// TODO
+						if (avc) {
+							configRecord = searchConfigRecord(e.value.payload);
+						} else {
+							// TODO
+							configRecord = "";
+						}
 						if (configRecord != null) {
 							console.log("ok. configurations.");
 							if (ws) {
@@ -119,7 +124,7 @@ window.addEventListener('DOMContentLoaded',(function(e){
 					console.log(" time:" + e.value.timecode + " + " + e.parent.timecode);
 					console.log(" flags:" + e.value.flags);
 					if (ws) {
-						setNalUnitSize(e.value.payload);
+						if (avc) setNalUnitSize(e.value.payload);
 						ws.send(createStreamMessage(3, e, e.value.payload));
 					}
 					e.value = null; // avoid append to parent.
@@ -133,7 +138,7 @@ window.addEventListener('DOMContentLoaded',(function(e){
 						console.log("data size: " + event.data.size);
 						let reader = new FileReader();
 						reader.onload = function() {
-							parser.append(new Uint8Array(reader.result));
+							parser.appendBuf(new Uint8Array(reader.result));
 							parser.tryParse();
 						};
 						reader.readAsArrayBuffer(event.data);
