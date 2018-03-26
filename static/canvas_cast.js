@@ -101,7 +101,7 @@ window.addEventListener('DOMContentLoaded',(function(e){
 		let ws = new WebSocket(document.getElementById('wsurl').value);
 		let startRecoder = function () {
 			if (recorder == null) {
-				let parser = new WebmPerser();
+				let parser = new WebmParser();
 				let configRecord = null;
 				parser.setListenser('simple_block', function(e) {
 					if (configRecord == null) {

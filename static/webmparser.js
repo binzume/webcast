@@ -1,7 +1,7 @@
 "use strict";
 
 
-class WebmPerser {
+class WebmParser {
     constructor() {
         this.buffer = [];
         this.buffers = [];
