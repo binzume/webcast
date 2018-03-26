@@ -8,19 +8,26 @@ var segmentLength = 100;
 var videoFrame = 0;
 function drawFrame(ctx, width, height) {
 	ctx.clearRect(0, 0, width, height);
-
-	ctx.font = "40px sans-serif";
-	ctx.fillText("FRAME:" + videoFrame, 10, 60);
-	ctx.fillText(new Date().toString(), 10, 120);
-
 	ctx.save();
 	ctx.translate(parseInt(width / 2), parseInt(height / 2)); 
+
+	let cameraVideo = document.getElementById('camera');
+	if (cameraVideo && cameraVideo.videoWidth > 0) {
+		var w = cameraVideo.videoWidth;
+		var h = cameraVideo.videoHeight;
+		ctx.drawImage(cameraVideo, -w/2, -h/2, w, h);
+	}
+
 	ctx.rotate((videoFrame * Math.PI) / 180);
 
 	ctx.beginPath();
 	ctx.strokeRect(-50, -50, 100, 100);
 
 	ctx.restore();
+
+	ctx.font = "40px sans-serif";
+	ctx.fillText("FRAME:" + videoFrame, 10, 60);
+	ctx.fillText(new Date().toString(), 10, 120);
 
 	videoFrame++;
 }
@@ -50,7 +57,7 @@ function searchConfigRecord(b) {
 	var level_idc = sps[3];
 	var compat = 0;
 	var r = new Uint8Array(sps.length + pps.length + 11);
-	r.set([1, profile_idc, compat, level_idc, 0xff, (3 << 5) | 1, sps.length << 8, sps.length]);
+	r.set([1, profile_idc, compat, level_idc, 0xff, (7 << 5) | 1, sps.length << 8, sps.length]);
 	r.set(sps, 8);
 	r.set([1, 0, pps.length], 8 + sps.length);
 	r.set(pps, 8 + sps.length + 3);
@@ -131,7 +138,10 @@ window.addEventListener('DOMContentLoaded',(function(e){
 						};
 						reader.readAsArrayBuffer(event.data);
 					}
-				  };
+				};
+				recorder.onerror = function(event) {
+					console.log("recorder error", event);
+				};
 				recorder.start(segmentLength);
 			}
 		};	
@@ -158,6 +168,35 @@ window.addEventListener('DOMContentLoaded',(function(e){
 			recorder = null;
 		}
 	}, true);
+
+
+	// camera
+	if (navigator.getUserMedia) {
+		document.getElementById('cameraTest').addEventListener('click', function() {
+			let cameraVideo = document.getElementById('camera');
+			let localMediaStream = null;
+			navigator.getUserMedia({video: true}, function(stream) {
+				cameraVideo.srcObject = stream;
+			}, function(error) {
+				console.log("camera error", error);
+			});
+		}, true);
+	}
+
+	// d & d video file.
+	canvas.addEventListener('dragover', function(e){
+		if (e.dataTransfer.types[0] == 'Files') {
+			e.preventDefault();
+		}
+	});
+	canvas.addEventListener('drop', function(e){
+		e.preventDefault();
+		var files = e.dataTransfer.files;
+		if (files.length > 0) {
+			let cameraVideo = document.getElementById('camera');
+			cameraVideo.src = URL.createObjectURL(files[0])
+		}
+	});
 
 	console.log("%cTest", 'color:Chocolate ; font-weight:bold; font-size:40pt');
 }),false);
