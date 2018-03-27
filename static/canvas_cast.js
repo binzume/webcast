@@ -195,7 +195,26 @@ window.addEventListener('DOMContentLoaded',(function(e){
 
 
 	// camera
-	if (navigator.getUserMedia) {
+	if (navigator.mediaDevices) {
+		document.getElementById('cameraTest').addEventListener('click', function() {
+			let cameraVideo = document.getElementById('camera');
+			let localMediaStream = null;
+
+			navigator.mediaDevices.enumerateDevices().then(function(devices) {
+				var videoDevices = devices.filter(function(d) {
+					return d.kind == 'videoinput';
+				});
+				console.log(videoDevices);
+				let d = videoDevices[videoDevices.length-1];
+				navigator.mediaDevices.getUserMedia({video: {optional: [{sourceId: d.deviceId}]}}).then(function(stream) {
+					cameraVideo.srcObject = stream;
+				}, function(error) {
+					console.log("camera error", error);
+				});
+			});
+		}, true);
+	} else if (navigator.getUserMedia) {
+		// legacy api.
 		document.getElementById('cameraTest').addEventListener('click', function() {
 			let cameraVideo = document.getElementById('camera');
 			let localMediaStream = null;
@@ -218,7 +237,8 @@ window.addEventListener('DOMContentLoaded',(function(e){
 		var files = e.dataTransfer.files;
 		if (files.length > 0) {
 			let cameraVideo = document.getElementById('camera');
-			cameraVideo.src = URL.createObjectURL(files[0])
+			cameraVideo.srcObject = null;
+			cameraVideo.src = URL.createObjectURL(files[0]);
 		}
 	});
 
