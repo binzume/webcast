@@ -5,9 +5,9 @@ class WebmParser {
         this.buffer = [];
         this.buffers = [];
         this.position = 0;
+        this.offset = 0;
         this.length = 0;
         this.currentElement = null;
-        this.stack = [];
         this.listener = {};
 
         let ebmlSpec = {
@@ -61,7 +61,7 @@ class WebmParser {
             0x1a45dfa3: ["ebml", 'object', ebmlSpec],
             0x18538067: ["webm_segment", 'object', segmentSpec]
         };
-        this.stack.push({name:"_root", spec: spec, size: -1});
+        this.currentElement = {name:"_root", type:'object', spec: spec, size: -1, parent: null};
     }
 
     setListenser(name, cb) {
@@ -80,6 +80,7 @@ class WebmParser {
         if (this.buffers.length > 0) {
             this.length -= this.buffer.length;
             this.position -= this.buffer.length;
+            this.offset += this.buffer.length;
             this.buffer = this.buffers.shift();
             return true;
         }
@@ -162,41 +163,42 @@ class WebmParser {
             this.listener[e.name](e);
         }
         if (e.value !== null) {
-            this._parent()[e.name] = e.value;
+            e.parent[e.name] = e.value;
         }
-    }
-
-    _parent() {
-        return this.stack[this.stack.length - 1];
+        return e.parent;
     }
 
     tryParse() {
         let objectCountLimit = 1000;
-        for (var t = 0 ;this.stack.length > 0 && t < objectCountLimit; t ++) {
-            if (this.currentElement == null) {
-                let id = this.readId();
-                if (id === null) return;
-                this.currentElement = {id: id, spec: {}, value: null, size: null};
+        for (var t = 0 ;t < objectCountLimit; t ++) {
+            let e = this.currentElement;
+            while (e.size >= 0 && (e.start - this.offset + e.size == this.position)) {
+                e = this.completeElement(e);
+                this.currentElement = e;
+            }
+
+            if (this.currentElement.type == 'object') {
+                let childId = this.readId();
+                if (childId === null) return;
+                this.currentElement = {id: childId, spec: {}, value: null, size: null, parent: this.currentElement};
             }
             if (this.currentElement.size === null) {
                 let size = this.readInt();
                 if (size === null) return;
                 this.currentElement.size = size;
-                this.currentElement.start = this.position;
+                this.currentElement.start = this.position + this.offset;
 
-                let spec = this._parent().spec;
-                let type = spec[this.currentElement.id] || ['unknown','raw',null];
+                let parent = this.currentElement.parent;
+                let type = parent.spec[this.currentElement.id] || ['unknown','raw',null];
                 if (type[1] == '_sibling_') {
-                    this.completeElement(this.stack.pop());
-                    spec = this._parent().spec;
-                    type = spec[this.currentElement.id] || ['unknown','raw',null];
+                    this.currentElement.parent = this.completeElement(parent);
+                    parent = this.currentElement.parent;
+                    type = parent.spec[this.currentElement.id] || ['unknown','raw',null];
                 }
                 this.currentElement.name = type[0];
                 this.currentElement.type = type[1];
                 if (type[1] == 'object') {
-                    this.currentElement.spec = type[2] || spec;
-                    this.stack.push(this.currentElement);
-                    this.currentElement = null;
+                    this.currentElement.spec = type[2] || parent.spec;
                     continue;
                 }
             }
@@ -207,26 +209,14 @@ class WebmParser {
 
             if (this.currentElement.type =='simple_block') {
                 let tr = this.readInt(), t = this.readN(2), f = this.readByte();
-                let sz =  this.currentElement.start + this.currentElement.size - this.position;
+                let sz =  this.currentElement.start + this.currentElement.size - this.position - this.offset;
                 this.currentElement.value = {track: tr, timecode: t, flags: f, payload: this.readBytes(sz)};
-                this.currentElement.parent = this._parent();
             } else if (this.currentElement.type =='int') {
                 this.currentElement.value = this.readN(this.currentElement.size);
             } else if (this.currentElement.type =='string') {
                 this.currentElement.value = this.readStr(this.currentElement.size);
             }
-            this.position = this.currentElement.start + this.currentElement.size;
-
-            while (this.stack.length > 0) {
-                this.completeElement(this.currentElement);
-                let p = this._parent();
-                if (p.size < 0 || p.start + p.size != this.position) {
-                    break;
-                }
-                this.currentElement = this.stack.pop();
-            }
-
-            this.currentElement = null;
+            this.position = this.currentElement.start + this.currentElement.size - this.offset;
         }
     }
 }
