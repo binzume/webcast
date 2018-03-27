@@ -64,7 +64,26 @@ function searchConfigRecord(b) {
 }
 
 function setNalUnitSize(b) {
-	// TODO
+	let p = -1;
+	for (let i = 0; i < b.length-4; i++) {
+		if (b[i] == 0 && b[i+1] == 0 && b[i+2] == 0 && b[i+3] == 1) {
+			if (p >= 0) {
+				let sz = i - p - 4;
+				b[p + 0] = (sz >> 24) & 0xff;
+				b[p + 1] = (sz >> 16) & 0xff;
+				b[p + 2] = (sz >> 8 ) & 0xff;
+				b[p + 3] = (sz      ) & 0xff;
+			}
+			p = i;
+		}
+	}
+	if (p >= 0) {
+		let sz = b.length - p - 4;
+		b[p + 0] = (sz >> 24) & 0xff;
+		b[p + 1] = (sz >> 16) & 0xff;
+		b[p + 2] = (sz >> 8 ) & 0xff;
+		b[p + 3] = (sz      ) & 0xff;
+	}
 }
 
 function createStreamMessage(type, e, payload) {
