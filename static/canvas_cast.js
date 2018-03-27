@@ -4,7 +4,7 @@
 var canvasId = 'screen';
 var streamType = 'video/webm;codecs=h264';
 var segmentLength = 100;
-var avc = true;
+var avc = streamType.includes('h264');
 
 var videoFrame = 0;
 function drawFrame(ctx, width, height) {
@@ -17,15 +17,12 @@ function drawFrame(ctx, width, height) {
 		var w = cameraVideo.videoWidth;
 		var h = cameraVideo.videoHeight;
 		ctx.drawImage(cameraVideo, -w/2, -h/2, w, h);
+	} else {
+		ctx.rotate((videoFrame * Math.PI) / 180);
+		ctx.strokeRect(-50, -50, 100, 100);
 	}
 
-	ctx.rotate((videoFrame * Math.PI) / 180);
-
-	ctx.beginPath();
-	ctx.strokeRect(-50, -50, 100, 100);
-
 	ctx.restore();
-
 	ctx.font = "40px sans-serif";
 	ctx.fillText("FRAME:" + videoFrame, 10, 60);
 	ctx.fillText(new Date().toString(), 10, 120);
@@ -97,11 +94,18 @@ window.addEventListener('DOMContentLoaded',(function(e){
 		document.getElementById('status').innerText = "MediaRecorder undefined.";
 	}
 
+	if (location.protocol != "file:") {
+		document.getElementById('wsurl').value = (location.protocol=="https:" ? "wss://" : "ws://")+location.host+'/stream/test'
+	}
+
 	let recorder = null;
 	document.getElementById('start').addEventListener('click', function() {
 		let ws = new WebSocket(document.getElementById('wsurl').value);
 		let startRecoder = function () {
 			if (recorder == null) {
+				if (ws != null) {
+					ws.send(JSON.stringify({"type":"connect", "debugMessage": "Hello!"}));
+				}
 				let parser = new WebmParser();
 				let configRecord = null;
 				parser.setListenser('simple_block', function(e) {
@@ -119,10 +123,7 @@ window.addEventListener('DOMContentLoaded',(function(e){
 							}
 						}
 					}
-					console.log(e.name);
-					console.log(" size:" + e.value.payload.length);
-					console.log(" time:" + e.value.timecode + " + " + e.parent.timecode);
-					console.log(" flags:" + e.value.flags);
+					console.log("frame time:" + e.value.timecode + "+" + e.parent.timecode + " flags:" + e.value.flags);
 					if (ws) {
 						if (avc) setNalUnitSize(e.value.payload);
 						ws.send(createStreamMessage(3, e, e.value.payload));
@@ -153,14 +154,13 @@ window.addEventListener('DOMContentLoaded',(function(e){
 		document.getElementById('status').innerText = "Connecting.";
 
 		ws.addEventListener('open', function (event) {
-			ws.send(JSON.stringify({"type":"connect", "debugMessage": "Hello!"}));
 			startRecoder();
 			document.getElementById('status').innerText = "Started.";
 		});
 
 		ws.addEventListener('close', function (event) {
-			document.getElementById('status').innerText = "WebSocket Error.";
 			startRecoder();
+			document.getElementById('status').innerText = "WebSocket Error.";
 			ws = null;
 		});
 
