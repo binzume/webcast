@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
@@ -21,8 +22,10 @@ var wsupgrader = websocket.Upgrader{
 }
 
 func wsToTCP(wsConn *websocket.Conn, tcpConn net.Conn) chan error {
-	done := make(chan error)
+	done := make(chan error, 2)
 	go func() {
+		defer wsConn.Close()
+		defer tcpConn.Close()
 		for {
 			t, m, err := wsConn.ReadMessage()
 			if err != nil {
@@ -30,6 +33,7 @@ func wsToTCP(wsConn *websocket.Conn, tcpConn net.Conn) chan error {
 				return
 			}
 			if t == websocket.BinaryMessage {
+				log.Printf("message type:%v size:%v", m[0], len(m))
 				err = binary.Write(tcpConn, binary.BigEndian, uint32(len(m)))
 				if err != nil {
 					done <- err
@@ -40,8 +44,9 @@ func wsToTCP(wsConn *websocket.Conn, tcpConn net.Conn) chan error {
 					done <- err
 					return
 				}
+			} else {
+				log.Println("invalid message", t, m)
 			}
-			log.Println("message", t, m)
 		}
 		done <- nil
 	}()
@@ -49,8 +54,10 @@ func wsToTCP(wsConn *websocket.Conn, tcpConn net.Conn) chan error {
 }
 
 func tcpToWs(tcpConn net.Conn, wsConn *websocket.Conn) chan error {
-	done := make(chan error)
+	done := make(chan error, 2)
 	go func() {
+		defer wsConn.Close()
+		defer tcpConn.Close()
 		for {
 			var l uint32
 			err := binary.Read(tcpConn, binary.BigEndian, &l)
@@ -81,6 +88,7 @@ func streamWsHandler(target, streamName string, w http.ResponseWriter, r *http.R
 		fmt.Printf("Failed to set websocket upgrade: %+v", err)
 		return
 	}
+	defer conn.Close()
 
 	var data map[string]interface{}
 	err = conn.ReadJSON(&data)
@@ -102,8 +110,8 @@ func streamWsHandler(target, streamName string, w http.ResponseWriter, r *http.R
 	done2 := wsToTCP(conn, conn2)
 
 	// wait
-	<-done1
-	<-done2
+	log.Println("done2", <-done2)
+	log.Println("done1", <-done1)
 	log.Println("disconnect")
 }
 
@@ -121,8 +129,7 @@ func initHttpd(target string) *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{"_status": 200, "message": "It works!"})
 	})
 
-	r.Static("/css", "./static/css")
-	r.Static("/js", "./static/js")
+	r.Use(static.Serve("/", static.LocalFile("./static", false)))
 	r.GET("/", func(c *gin.Context) {
 		c.File("./static/index.html")
 	})
