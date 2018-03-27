@@ -25,6 +25,8 @@ class WebmParser {
         let clusterSpec = {
             0xe7: ['timecode', 'int'],
             0xa3: ['simple_block', 'simple_block'],
+            0xa0: ['block_group', 'object'],
+            0xa1: ['block', 'raw'], // TODO
             0x1f43b675: ['cluster', '_sibling_'] // ignore cluster in cluster.
         };
 
@@ -126,9 +128,12 @@ class WebmParser {
     }
 
     readBytes(l) {
-        // TODO
         let p = this.position;
         this.position+=l;
+        if (this.position > this.buffer.length) {
+            console.log("ERROR: out of range [" + p + "," + l + "]:"+this.buffer.length);
+            l = this.buffer.length - p; // TODO concat next buffer.
+        }
         return new Uint8Array(this.buffer.buffer, p, l);
     }
 
@@ -141,7 +146,7 @@ class WebmParser {
     readN(l) {
         let v = 0;
         for (let i = 0; i < l; i++) {
-            v = (v<<8) | this.buffer[this.position];
+            v = v * 256 + this.buffer[this.position];
             this.position ++;
         }
         return v;
