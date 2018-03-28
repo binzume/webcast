@@ -27,6 +27,7 @@ class WebmParser {
             0xa3: ['simple_block', 'simple_block'],
             0xa0: ['block_group', 'object'],
             0xa1: ['block', 'block'],
+            0xfb: ['reference_block', 'int'],
             0x1f43b675: ['cluster', '_sibling_'] // ignore cluster in cluster.
         };
 
@@ -116,7 +117,7 @@ class WebmParser {
             console.log("ERROR: out of range [" + p + "," + l + "]:"+this.buffer.length);
             l = this.buffer.length - p; // TODO concat next buffer.
         }
-        return new Uint8Array(this.buffer.buffer, p, l);
+        return new Uint8Array(this.buffer.buffer, this.buffer.byteOffset + p, l);
     }
 
     readN(l) {
@@ -167,11 +168,11 @@ class WebmParser {
                 this.currentElement.start = this.position + this.offset;
 
                 let parent = this.currentElement.parent;
-                let type = parent.spec[this.currentElement.id] || ['unknown','raw',null];
+                let type = parent.spec[this.currentElement.id] || ['unknown' + this.currentElement.id,'raw',null];
                 if (type[1] == '_sibling_') {
                     this.currentElement.parent = this.completeElement(parent);
                     parent = this.currentElement.parent;
-                    type = parent.spec[this.currentElement.id] || ['unknown','raw',null];
+                    type = parent.spec[this.currentElement.id] || ['unknown' + this.currentElement.id,'raw',null];
                 }
                 this.currentElement.name = type[0];
                 this.currentElement.type = type[1];
