@@ -15,15 +15,21 @@ class Player {
 		this.ws = new WebSocket(wsURL);
 		this.ws.binaryType = 'arraybuffer';
 		let f = false;
+		let framequeue = [];
 		this.ws.addEventListener('open', (event) => {
 			console.log(event);
 			// init media source.
 			this.mediaSource = new MediaSource();
 			this.mediaSource.addEventListener('sourceopen', () => {
 				this.sourceBuffer = this.mediaSource.addSourceBuffer(streamType);
+				this.sourceBuffer.mode = 'sequence';
 				this.sourceBuffer.addEventListener('updateend', () => {
-					console.log("updateend...");
-					f = true;
+					if (framequeue.length > 0) {
+						this.sourceBuffer.appendBuffer(framequeue.shift());
+					} else {
+						console.log("wait...");
+						f = true;
+					}
 				}, false);
 				this.ws.send(JSON.stringify({"type":"connect", "stream":streamName, "debugMessage": "Hello!"}));
 			}, false);
@@ -38,13 +44,13 @@ class Player {
             this.ws = null;
 		});
 		let parser = new WebmParser(); // debug
-		let tt = 1000;
-        parser.setListenser('tracks', (e) => {console.log(e)});
-        parser.setListenser('cluster', (e) => {console.log(e)});
+        parser.setListenser('tracks', (e) => {console.log("tracks", e)});
+		parser.setListenser('cluster', (e) => {console.log( "cluster " + e.value.timecode )});
+		let skip = true;
 		this.ws.addEventListener('message', (event) => {
 			// TODO
 			let message = this.parseMessage(event.data);
-			console.log("message", message);
+			// console.log("message", message);
 			if (message.type == 2) {
 				this.sourceBuffer.appendBuffer(message.payload);
 				parser.appendBuf(message.payload);
@@ -52,6 +58,9 @@ class Player {
 				console.log(parser.length - parser.position);
 			}
 			if (message.type == 3) {
+				if (skip && message.flags == 0) return;
+				skip = false;
+				
 				let data = new ArrayBuffer(message.payload.length + 28);
 				let v = new DataView(data);
 				v.setUint32(0, 0x1f43b675); // cluster
@@ -61,8 +70,6 @@ class Player {
 				v.setUint8(13, 0x85); // timecode size
 				v.setUint8(14, 0x00); // 32 + 8 bit TODO
 				v.setUint32(15, message.timestamp); // timecode
-				// 
-				tt++;
 
 				v.setUint8(19, 0xa3); // simpleblock
 				v.setUint32(20, 0x10000000 | (message.payload.length + 4)); // 32bit size
@@ -76,9 +83,10 @@ class Player {
 				parser.appendBuf(buffer);
 				parser.tryParse();
 
-				if (f) {
+				framequeue.push(data);
+				if (f && framequeue.length > 0) {
+					this.sourceBuffer.appendBuffer(framequeue.shift());
 					f = false;
-					this.sourceBuffer.appendBuffer(data);
 				}
 			}
 		});
@@ -101,14 +109,13 @@ class Player {
 	}
 }
 
-let canvasId = 'screen';
 let player = new Player();
 
 window.addEventListener('DOMContentLoaded',(function(e){
-	let canvas = document.getElementById(canvasId);
-	let ctx =canvas.getContext('2d');
-	ctx.fillStyle = "rgb(255, 0, 0)";
-	ctx.strokeStyle = "rgb(0, 0, 255)";
+	if (location.protocol != "file:") {
+		var wsurl = document.getElementById('wsurl');
+		wsurl.value = wsurl.value.replace(/^ws:\/\/[\w:]+/, (location.protocol=="https:" ? "wss://" : "ws://")+location.host);
+	}
 
 	document.getElementById('start').addEventListener('click', function() {
 		player.start(document.getElementById('wsurl').value, "", document.getElementById('video'));
