@@ -12,7 +12,7 @@ class Publisher {
 
     start(stream, mimeType, wsURL, streamName) {
         this.statusElement = document.getElementById('status');
-        if (this.ws != null) {
+        if (stream.ended || this.ws != null) {
             return false;
         }
         console.log("isTypeSupported:" + MediaRecorder.isTypeSupported(mimeType));
@@ -80,6 +80,29 @@ class Publisher {
         this.parser.setListenser('track_entry', (e) => {
             console.log(e.value);
         });
+        if (this.experimentalhack) {
+            avc = false;
+            this.segmentLength = 50;
+            this.parser.setListenser('tracks', (e) => {
+                // send webm header.
+                if (configRecord) return;
+                configRecord =  new Uint8Array(this.parser.buffer.buffer, 0, e.start + e.size - this.parser.offset);
+                if (this.parser.offset == 1) {
+                    let b2 = new ArrayBuffer(configRecord.length + this.parser.offset);
+                    let old = configRecord
+                    configRecord =  new Uint8Array(b2);
+                    configRecord[0] = 0x1a;
+                    configRecord.set(old, this.parser.offset);
+                    console.log(configRecord);
+
+                }
+                if (this.parser.offset > 1) { this.stop(); throw "bug" + this.parser.offset; }
+                if (this.ws != null) {
+                    this.ws.send(this.createStreamMessage(2, e, configRecord));
+                }
+                console.log("SEND HEADER" + (e.start + e.size));
+            });
+        }
         let blockListener = (e) => {
             if (configRecord == null) {
                 if (avc) {
@@ -105,7 +128,12 @@ class Publisher {
             e.value = null; // avoid append to parent.
         };
         this.parser.setListenser('simple_block', blockListener);
-        this.parser.setListenser('block', blockListener); // TODO
+        // this.parser.setListenser('block', blockListener); // TODO
+        this.parser.setListenser('block_group', (e) => {
+            if (!e.value.reference_block) {
+                e.value.block.flags |= 0x80;
+            }
+            blockListener({parent: e.parent, value: e.value.block  }) });
         this.recorder.start(this.segmentLength);
     }
 
