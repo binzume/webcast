@@ -134,8 +134,17 @@ func initHttpd(target string) *gin.Engine {
 		c.File("./static/index.html")
 	})
 
+	// proxy
 	r.GET("/stream/:stream", func(c *gin.Context) {
 		streamWsHandler(target, c.Param("stream"), c.Writer, c.Request)
+	})
+
+	// hub
+	r.GET("/stream/:stream/publish", func(c *gin.Context) {
+		publishWsHandler(c.Param("stream"), c.Writer, c.Request)
+	})
+	r.GET("/stream/:stream/subscribe", func(c *gin.Context) {
+		subscribeWsHandler(c.Param("stream"), c.Writer, c.Request)
 	})
 
 	return r
