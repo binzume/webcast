@@ -1,11 +1,11 @@
 // cast canvas.
 "use strict";
 
-var canvasId = 'screen';
-var streamType = 'video/webm;codecs=h264';
+let canvasId = 'screen';
+let streamType = 'video/webm;codecs=avc1';
 let publisher = new Publisher();
 
-var videoFrame = 0;
+let videoFrame = 0;
 function drawFrame(ctx, width, height) {
 	ctx.clearRect(0, 0, width, height);
 	ctx.save();
@@ -44,7 +44,8 @@ window.addEventListener('DOMContentLoaded',(function(e){
 	}
 
 	if (location.protocol != "file:") {
-		document.getElementById('wsurl').value = (location.protocol=="https:" ? "wss://" : "ws://")+location.host+'/stream/test'
+		let wsurl = document.getElementById('wsurl');
+		wsurl.value = wsurl.value.replace(/^ws:\/\/[\w:]+/, (location.protocol=="https:" ? "wss://" : "ws://")+location.host);
 	}
 
 	document.getElementById('start').addEventListener('click', function() {
@@ -65,7 +66,7 @@ window.addEventListener('DOMContentLoaded',(function(e){
 			let localMediaStream = null;
 
 			navigator.mediaDevices.enumerateDevices().then((devices) => {
-				var videoDevices = devices.filter((d) => {
+				let videoDevices = devices.filter((d) => {
 					return d.kind == 'videoinput';
 				});
 				console.log(videoDevices);
@@ -98,7 +99,7 @@ window.addEventListener('DOMContentLoaded',(function(e){
 	});
 	canvas.addEventListener('drop', function(e){
 		e.preventDefault();
-		var files = e.dataTransfer.files;
+		let files = e.dataTransfer.files;
 		if (files.length > 0) {
 			let cameraVideo = document.getElementById('camera');
 			cameraVideo.srcObject = null;

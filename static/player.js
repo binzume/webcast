@@ -38,7 +38,7 @@ class Player {
 			// video.srcObject = this.mediaSource; not work
 			video.src = URL.createObjectURL(this.mediaSource);
 		});
-		video.addEventListener('error', (e) => { console.log(e, video.error); throw("error" + video.error.detail) }, true);
+		video.addEventListener('error', (e) => { console.log(e, video.error); throw("error:" + video.error.message) }, true);
 		this.ws.addEventListener('close', (event) => {
 			console.log(event);
             this.ws = null;

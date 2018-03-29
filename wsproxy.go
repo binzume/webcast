@@ -82,7 +82,7 @@ func tcpToWs(tcpConn net.Conn, wsConn *websocket.Conn) chan error {
 	return done
 }
 
-func streamWsHandler(target, streamName string, w http.ResponseWriter, r *http.Request) {
+func proxyWsHandler(target, streamName string, w http.ResponseWriter, r *http.Request) {
 	conn, err := wsupgrader.Upgrade(w, r, nil)
 	if err != nil {
 		fmt.Printf("Failed to set websocket upgrade: %+v", err)
@@ -135,15 +135,15 @@ func initHttpd(target string) *gin.Engine {
 	})
 
 	// proxy
-	r.GET("/stream/:stream", func(c *gin.Context) {
-		streamWsHandler(target, c.Param("stream"), c.Writer, c.Request)
+	r.GET("/proxy/:stream", func(c *gin.Context) {
+		proxyWsHandler(target, c.Param("stream"), c.Writer, c.Request)
 	})
 
 	// hub
-	r.GET("/stream/:stream/publish", func(c *gin.Context) {
+	r.GET("/publish/:stream", func(c *gin.Context) {
 		publishWsHandler(c.Param("stream"), c.Writer, c.Request)
 	})
-	r.GET("/stream/:stream/subscribe", func(c *gin.Context) {
+	r.GET("/subscribe/:stream", func(c *gin.Context) {
 		subscribeWsHandler(c.Param("stream"), c.Writer, c.Request)
 	})
 
