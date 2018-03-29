@@ -16,7 +16,7 @@ class Publisher {
             return false;
         }
         console.log("isTypeSupported:" + MediaRecorder.isTypeSupported(mimeType));
-        this.recorder = new MediaRecorder(stream, {mimeType: mimeType});
+        this.recorder = new MediaRecorder(stream, { mimeType: mimeType });
         this.parser = new WebmParser();
         let parser = this.parser;
 
@@ -44,21 +44,21 @@ class Publisher {
 
         this.updateStatus("Connecting.");
         this.ws = new WebSocket(wsURL);
-		this.ws.addEventListener('open', (event) => {
-            this.ws.send(JSON.stringify({"type":"connect", "stream":streamName, "debugMessage": "Hello!"}));
-			this.startRecoder(mimeType);
-			this.updateStatus("Started.");
-		});
-		this.ws.addEventListener('close', (event) => {
+        this.ws.addEventListener('open', (event) => {
+            this.ws.send(JSON.stringify({ "type": "connect", "stream": streamName, "debugMessage": "Hello!" }));
+            this.startRecoder(mimeType);
+            this.updateStatus("Started.");
+        });
+        this.ws.addEventListener('close', (event) => {
             this.updateStatus("WebSocket Error.");
             this.ws = null;
-		});
+        });
     }
 
     stop() {
-		if (this.recorder != null) {
-			this.recorder.stop();
-			this.recorder = null;
+        if (this.recorder != null) {
+            this.recorder.stop();
+            this.recorder = null;
         }
         if (this.ws != null) {
             this.ws.close();
@@ -86,11 +86,11 @@ class Publisher {
             this.parser.setListenser('tracks', (e) => {
                 // send webm header.
                 if (configRecord) return;
-                configRecord =  new Uint8Array(this.parser.buffer.buffer, 0, e.start + e.size - this.parser.offset);
+                configRecord = new Uint8Array(this.parser.buffer.buffer, 0, e.start + e.size - this.parser.offset);
                 if (this.parser.offset == 1) {
                     let b2 = new ArrayBuffer(configRecord.length + this.parser.offset);
                     let old = configRecord
-                    configRecord =  new Uint8Array(b2);
+                    configRecord = new Uint8Array(b2);
                     configRecord[0] = 0x1a;
                     configRecord.set(old, this.parser.offset);
                     console.log(configRecord);
@@ -119,7 +119,7 @@ class Publisher {
                 }
             }
             console.log("frame time:" + e.value.timecode + "+" + e.parent.value.timecode + " flags:" + e.value.flags);
-            this.frames ++;
+            this.frames++;
             this.bytes += e.value.payload.length;
             if (avc) this.setNalUnitSize(e.value.payload);
             if (this.ws) {
@@ -133,7 +133,8 @@ class Publisher {
             if (!e.value.reference_block) {
                 e.value.block.flags |= 0x80;
             }
-            blockListener({parent: e.parent, value: e.value.block  }) });
+            blockListener({ parent: e.parent, value: e.value.block })
+        });
         this.recorder.start(this.segmentLength);
     }
 
@@ -142,10 +143,10 @@ class Publisher {
         // TODO: multiple pps?
         let sps = [], pps = [];
         let type = 0;
-        for (let i = 0; i < b.length-4; i++) {
-            if (b[i] == 0 && b[i+1] == 0 && b[i+2] == 0 && b[i+3] == 1) {
-                console.log("NAL unit type" + (b[i+4]&0x1f));
-                type = (b[i+4]&0x1f);
+        for (let i = 0; i < b.length - 4; i++) {
+            if (b[i] == 0 && b[i + 1] == 0 && b[i + 2] == 0 && b[i + 3] == 1) {
+                console.log("NAL unit type" + (b[i + 4] & 0x1f));
+                type = (b[i + 4] & 0x1f);
                 i += 3;
             } else {
                 if (type == 7) sps.push(b[i]);
@@ -167,14 +168,14 @@ class Publisher {
 
     setNalUnitSize(b) {
         let p = -1;
-        for (let i = 0; i < b.length-4; i++) {
-            if (b[i] == 0 && b[i+1] == 0 && b[i+2] == 0 && b[i+3] == 1) {
+        for (let i = 0; i < b.length - 4; i++) {
+            if (b[i] == 0 && b[i + 1] == 0 && b[i + 2] == 0 && b[i + 3] == 1) {
                 if (p >= 0) {
                     let sz = i - p - 4;
                     b[p + 0] = (sz >> 24) & 0xff;
                     b[p + 1] = (sz >> 16) & 0xff;
-                    b[p + 2] = (sz >> 8 ) & 0xff;
-                    b[p + 3] = (sz      ) & 0xff;
+                    b[p + 2] = (sz >> 8) & 0xff;
+                    b[p + 3] = (sz) & 0xff;
                 }
                 p = i;
             }
@@ -183,8 +184,8 @@ class Publisher {
             let sz = b.length - p - 4;
             b[p + 0] = (sz >> 24) & 0xff;
             b[p + 1] = (sz >> 16) & 0xff;
-            b[p + 2] = (sz >> 8 ) & 0xff;
-            b[p + 3] = (sz      ) & 0xff;
+            b[p + 2] = (sz >> 8) & 0xff;
+            b[p + 3] = (sz) & 0xff;
         }
     }
 
@@ -194,8 +195,8 @@ class Publisher {
         let t = e.value.timecode + e.parent.value.timecode;
         hv.setUint8(0, type); // type: stream data.
         hv.setUint8(1, e.value.flags);
-        hv.setUint16(2, header.byteLength-4); // header size.
-        hv.setUint32(4, t/4294967296); // Timestamp
+        hv.setUint16(2, header.byteLength - 4); // header size.
+        hv.setUint32(4, t / 4294967296); // Timestamp
         hv.setUint32(8, t); // Timestamp
         hv.setUint32(12, 1000); // Timescale.
         hv.setUint32(16, 0x61766300); // 'avc'

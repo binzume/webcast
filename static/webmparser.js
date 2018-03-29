@@ -62,7 +62,7 @@ class WebmParser {
             0x1a45dfa3: ["ebml", 'object', ebmlSpec],
             0x18538067: ["webm_segment", 'object', segmentSpec]
         };
-        this.currentElement = {name:"_root", type:'object', value: {}, spec: spec, size: -1, parent: null};
+        this.currentElement = { name: "_root", type: 'object', value: {}, spec: spec, size: -1, parent: null };
     }
 
     setListenser(name, cb) {
@@ -90,15 +90,15 @@ class WebmParser {
 
     // return value or null.
     readVN(clearmsb) {
-        if(!this.checkBuf()) return null;
+        if (!this.checkBuf()) return null;
         let v = this.buffer[this.position], mask = 0x80;
-        for (let i = 0; i < 8; i++, mask >>= 1) {
+        for (let i = 0; i < 8; i++ , mask >>= 1) {
             if (v & mask) {
                 if (i + 1 > this.length - this.position) {
                     return null;
                 }
                 if (clearmsb) v ^= mask;
-                this.position ++;
+                this.position++;
                 for (; i > 0; i--) {
                     this.checkBuf();
                     v = v * 256 + this.buffer[this.position++];
@@ -112,9 +112,9 @@ class WebmParser {
     readBytes(l) {
         this.checkBuf();
         let p = this.position;
-        this.position+=l;
+        this.position += l;
         if (this.position > this.buffer.length) {
-            console.log("ERROR: out of range [" + p + "," + l + "]:"+this.buffer.length);
+            console.log("ERROR: out of range [" + p + "," + l + "]:" + this.buffer.length);
             l = this.buffer.length - p; // TODO concat next buffer.
         }
         return new Uint8Array(this.buffer.buffer, this.buffer.byteOffset + p, l);
@@ -149,7 +149,7 @@ class WebmParser {
 
     tryParse() {
         let objectCountLimit = 1000;
-        for (let t = 0 ;t < objectCountLimit; t ++) {
+        for (let t = 0; t < objectCountLimit; t++) {
             let e = this.currentElement;
             while (e.size >= 0 && (e.start - this.offset + e.size == this.position)) {
                 e = this.completeElement(e);
@@ -159,7 +159,7 @@ class WebmParser {
             if (this.currentElement.type == 'object') {
                 let childId = this.readVN(false);
                 if (childId === null) return;
-                this.currentElement = {id: childId, spec: {}, value: null, size: null, parent: this.currentElement};
+                this.currentElement = { id: childId, spec: {}, value: null, size: null, parent: this.currentElement };
             }
             if (this.currentElement.size === null) {
                 let size = this.readVN(true);
@@ -168,11 +168,11 @@ class WebmParser {
                 this.currentElement.start = this.position + this.offset;
 
                 let parent = this.currentElement.parent;
-                let type = parent.spec[this.currentElement.id] || ['unknown' + this.currentElement.id,'raw',null];
+                let type = parent.spec[this.currentElement.id] || ['unknown' + this.currentElement.id, 'raw', null];
                 if (type[1] == '_sibling_') {
                     this.currentElement.parent = this.completeElement(parent);
                     parent = this.currentElement.parent;
-                    type = parent.spec[this.currentElement.id] || ['unknown' + this.currentElement.id,'raw',null];
+                    type = parent.spec[this.currentElement.id] || ['unknown' + this.currentElement.id, 'raw', null];
                 }
                 this.currentElement.name = type[0];
                 this.currentElement.type = type[1];
@@ -186,13 +186,13 @@ class WebmParser {
                 return;
             }
 
-            if (this.currentElement.type =='simple_block' || this.currentElement.type == 'block') {
+            if (this.currentElement.type == 'simple_block' || this.currentElement.type == 'block') {
                 let tr = this.readVN(true), t = this.readN(2), f = this.readByte();
-                let sz =  this.currentElement.start + this.currentElement.size - this.position - this.offset;
-                this.currentElement.value = {track: tr, timecode: t, flags: f, payload: this.readBytes(sz)};
-            } else if (this.currentElement.type =='int') {
+                let sz = this.currentElement.start + this.currentElement.size - this.position - this.offset;
+                this.currentElement.value = { track: tr, timecode: t, flags: f, payload: this.readBytes(sz) };
+            } else if (this.currentElement.type == 'int') {
                 this.currentElement.value = this.readN(this.currentElement.size);
-            } else if (this.currentElement.type =='string') {
+            } else if (this.currentElement.type == 'string') {
                 this.currentElement.value = this.readStr(this.currentElement.size);
             }
             this.position = this.currentElement.start + this.currentElement.size - this.offset;
